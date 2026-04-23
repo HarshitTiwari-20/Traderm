@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { isConnected, getAddress, isAllowed, signTransaction } from "@stellar/freighter-api";
+import { isConnected, getAddress, isAllowed, signTransaction, getNetworkDetails } from "@stellar/freighter-api";
 import { Horizon, rpc, Contract, TransactionBuilder, Networks, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 
 type TradeType = "Call" | "Put";
@@ -155,6 +155,17 @@ export default function TradePanel() {
       if (!await isConnected() || !await isAllowed()) {
         throw new Error("Wallet not connected");
       }
+
+      // Pre-flight: verify Freighter wallet is set to the same network
+      const walletNetDetails = await getNetworkDetails();
+      if (walletNetDetails.networkPassphrase !== config.passphrase) {
+        const walletNet = walletNetDetails.network || "unknown";
+        const appNet = network === "TESTNET" ? "Test Net" : "Main Net";
+        throw new Error(
+          `Network mismatch! Your Freighter wallet is on "${walletNet}" but the app is set to "${appNet}". ` +
+          `Please switch your Freighter wallet to ${appNet} or change the network toggle.`
+        );
+      }
       
       const keyObj = await getAddress();
       const pubKey = typeof keyObj === "string" ? keyObj : keyObj?.address;
@@ -192,10 +203,9 @@ export default function TradePanel() {
       // 1. Simulate and Assemble with auths & footprint
       const assembledTx = await server.prepareTransaction(tx);
 
-      // 2. Sign with Freighter
+      // 2. Sign with Freighter — only networkPassphrase is valid in v6 API
       const signResult = await signTransaction(assembledTx.toXDR(), { 
         networkPassphrase: config.passphrase,
-        network: network
       });
       
       if (signResult.error) {
