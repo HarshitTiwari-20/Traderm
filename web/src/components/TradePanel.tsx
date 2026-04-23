@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { isConnected, getAddress, isAllowed } from "@stellar/freighter-api";
-import { Horizon } from "@stellar/stellar-sdk";
+import { isConnected, getAddress, isAllowed, signTransaction } from "@stellar/freighter-api";
+import { Horizon, rpc, Contract, TransactionBuilder, Networks, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 
 type TradeType = "Call" | "Put";
 
@@ -13,16 +13,41 @@ interface ActiveTrade {
   entryPrice: number;
   expiryTime: number; // Unix timestamp
   status: "active" | "won" | "lost" | "tie";
+  txHash?: string;
 }
 
+const TESTNET_CONTRACT_ID = "CADKQRPQ3BKQ6GZ3UQEDJAYM6ROHJEHPIQZG2N5ANGTOHTJ7ASUCN3DW";
+const MAINNET_CONTRACT_ID = ""; // To be deployed
+
 export default function TradePanel() {
+  const [network, setNetwork] = useState<"TESTNET" | "PUBLIC">("TESTNET");
   const [amount, setAmount] = useState<number>(0);
   const [expiry, setExpiry] = useState<number>(60); // seconds
   const [availableBalance, setAvailableBalance] = useState<number>(0);
   const [sliderValue, setSliderValue] = useState<number>(0);
   const [currentPrice, setCurrentPrice] = useState<number>(0);
   const [trades, setTrades] = useState<ActiveTrade[]>([]);
+  const [isTxPending, setIsTxPending] = useState(false);
   const PAYOUT_RATE = 0.82; // 82% profit on win
+
+  const getNetworkConfig = () => {
+    if (network === "PUBLIC") {
+      return {
+        horizonUrl: "https://horizon.stellar.org",
+        rpcUrl: "https://soroban-rpc.mainnet.stellar.org",
+        passphrase: Networks.PUBLIC,
+        contractId: MAINNET_CONTRACT_ID,
+        explorerPrefix: "https://stellar.expert/explorer/public/tx/"
+      };
+    }
+    return {
+      horizonUrl: "https://horizon-testnet.stellar.org",
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      passphrase: Networks.TESTNET,
+      contractId: TESTNET_CONTRACT_ID,
+      explorerPrefix: "https://stellar.expert/explorer/testnet/tx/"
+    };
+  };
 
   // Fetch Available Balance
   useEffect(() => {
@@ -32,26 +57,34 @@ export default function TradePanel() {
           const keyObj = await getAddress();
           const pubKey = typeof keyObj === "string" ? keyObj : keyObj?.address;
           if (pubKey) {
-            const server = new Horizon.Server("https://horizon-testnet.stellar.org");
-            const account = await server.loadAccount(pubKey);
-            const nativeBalance = account.balances.find((b: any) => b.asset_type === "native");
-            if (nativeBalance) {
-              // Only set initial balance or if it changes externally
-              setAvailableBalance(parseFloat(nativeBalance.balance));
+            const config = getNetworkConfig();
+            const server = new Horizon.Server(config.horizonUrl);
+            try {
+              const account = await server.loadAccount(pubKey);
+              const nativeBalance = account.balances.find((b: any) => b.asset_type === "native");
+              if (nativeBalance) {
+                setAvailableBalance(parseFloat(nativeBalance.balance));
+              }
+            } catch (e: any) {
+              if (e?.response?.status === 404) {
+                setAvailableBalance(0); // Account not funded on this network
+              } else {
+                throw e;
+              }
             }
           }
         } else {
-          // Fallback mock balance for testing if wallet not connected
           setAvailableBalance(10000);
         }
       } catch (err) {
         console.error("Failed to fetch balance", err);
-        setAvailableBalance(10000); // Mock balance fallback
       }
     };
     
     fetchBalance();
-  }, []);
+    const interval = setInterval(fetchBalance, 10000);
+    return () => clearInterval(interval);
+  }, [network]);
 
   // Fetch Live Price (Binance WS)
   useEffect(() => {
@@ -75,18 +108,16 @@ export default function TradePanel() {
         return prevTrades.map((trade) => {
           if (trade.status !== "active") return trade;
 
-          // Check if expired
           if (now >= trade.expiryTime) {
             let status: "won" | "lost" | "tie" = "lost";
             if (trade.type === "Call" && currentPrice > trade.entryPrice) status = "won";
             if (trade.type === "Put" && currentPrice < trade.entryPrice) status = "won";
             if (currentPrice === trade.entryPrice) status = "tie";
 
-            // Settle funds locally
             if (status === "won") {
               setAvailableBalance((b) => b + trade.amount + (trade.amount * PAYOUT_RATE));
             } else if (status === "tie") {
-              setAvailableBalance((b) => b + trade.amount); // return funds
+              setAvailableBalance((b) => b + trade.amount);
             }
 
             return { ...trade, status };
@@ -110,21 +141,95 @@ export default function TradePanel() {
     setAmount(Number(((availableBalance * val) / 100).toFixed(2)));
   };
 
-  const handleTrade = (type: TradeType) => {
+  const handleTrade = async (type: TradeType) => {
     if (amount <= 0 || amount > availableBalance || currentPrice === 0) return;
 
-    const newTrade: ActiveTrade = {
-      id: Math.random().toString(36).substr(2, 9),
-      type,
-      amount,
-      entryPrice: currentPrice,
-      expiryTime: Date.now() + expiry * 1000,
-      status: "active",
-    };
+    const config = getNetworkConfig();
+    if (!config.contractId) {
+      alert(`Smart Contract is not yet deployed on ${network}!`);
+      return;
+    }
 
-    // Lock funds locally
-    setAvailableBalance((b) => b - amount);
-    setTrades((prev) => [newTrade, ...prev]);
+    setIsTxPending(true);
+    try {
+      if (!await isConnected() || !await isAllowed()) {
+        throw new Error("Wallet not connected");
+      }
+      
+      const keyObj = await getAddress();
+      const pubKey = typeof keyObj === "string" ? keyObj : keyObj?.address;
+      if (!pubKey) throw new Error("Could not get public key");
+
+      const server = new rpc.Server(config.rpcUrl);
+      const horizon = new Horizon.Server(config.horizonUrl);
+      const account = await horizon.loadAccount(pubKey);
+      
+      const contract = new Contract(config.contractId);
+      
+      // Convert inputs to Soroban SCVals
+      const amountStroops = Math.floor(amount * 10_000_000); // XLM is 7 decimals
+      const priceCents = Math.floor(currentPrice * 100); // integer prices
+
+      // In Soroban, custom Enums without data map to ScVal::Symbol if simple, or we can use generic symbol for our contract Prediction type.
+      // E.g., Prediction::Call -> Symbol("Call")
+      const tx = new TransactionBuilder(account, {
+        fee: "10000",
+        networkPassphrase: config.passphrase,
+      })
+      .addOperation(
+        contract.call("open_trade",
+          nativeToScVal(pubKey, { type: "address" }),
+          nativeToScVal("BTCUSDT", { type: "string" }),
+          nativeToScVal(amountStroops, { type: "i128" }),
+          nativeToScVal(priceCents, { type: "i128" }),
+          nativeToScVal(Math.floor(Date.now() / 1000) + expiry, { type: "u64" }),
+          xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(type)])
+        )
+      )
+      .setTimeout(60)
+      .build();
+
+      // 1. Simulate and Assemble with auths & footprint
+      const assembledTx = await server.prepareTransaction(tx);
+
+      // 2. Sign with Freighter
+      const signResult = await signTransaction(assembledTx.toXDR(), { 
+        networkPassphrase: config.passphrase,
+        network: network
+      });
+      
+      if (signResult.error) {
+        throw new Error(signResult.error.message || "Wallet signing failed");
+      }
+      
+      const signedTx = TransactionBuilder.fromXDR(signResult.signedTxXdr, config.passphrase);
+
+      // 4. Submit to Network
+      const res = await server.sendTransaction(signedTx);
+
+      if (res.status === "PENDING" || res.status === "SUCCESS") {
+        const newTrade: ActiveTrade = {
+          id: Math.random().toString(36).substr(2, 9),
+          type,
+          amount,
+          entryPrice: currentPrice,
+          expiryTime: Date.now() + expiry * 1000,
+          status: "active",
+          txHash: res.hash,
+        };
+
+        // UI Updates
+        setAvailableBalance((b) => b - amount);
+        setTrades((prev) => [newTrade, ...prev]);
+      } else {
+        throw new Error("Failed to submit transaction");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Blockchain Error: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsTxPending(false);
+    }
   };
 
   const calculateLivePnL = (trade: ActiveTrade) => {
@@ -145,6 +250,27 @@ export default function TradePanel() {
     <div className="flex flex-col gap-6 w-full h-full">
       {/* Main Trading Panel */}
       <div className="flex flex-col gap-6 p-6 bg-gray-900/50 backdrop-blur-lg border border-gray-800 rounded-2xl w-full max-w-sm shrink-0">
+        
+        {/* Network Toggle */}
+        <div className="flex bg-gray-800 rounded-xl p-1 mb-2">
+          <button
+            onClick={() => setNetwork("TESTNET")}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ${
+              network === "TESTNET" ? "bg-gray-700 text-white shadow" : "text-gray-400 hover:text-gray-200"
+            }`}
+          >
+            TESTNET
+          </button>
+          <button
+            onClick={() => setNetwork("PUBLIC")}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ${
+              network === "PUBLIC" ? "bg-emerald-600 text-white shadow" : "text-gray-400 hover:text-gray-200"
+            }`}
+          >
+            MAINNET
+          </button>
+        </div>
+
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-semibold text-white">Place Trade</h2>
           <span className="text-sm font-medium text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-md">
@@ -213,22 +339,22 @@ export default function TradePanel() {
         <div className="flex flex-col gap-4 mt-2">
           <button
             onClick={() => handleTrade("Call")}
-            disabled={amount <= 0 || amount > availableBalance}
+            disabled={amount <= 0 || amount > availableBalance || isTxPending}
             className="group relative w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold text-lg shadow-[0_0_20px_rgba(16,185,129,0.3)] disabled:shadow-none transition-all overflow-hidden"
           >
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform" />
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
-            CALL
+            {isTxPending ? "CONFIRMING..." : "CALL"}
           </button>
 
           <button
             onClick={() => handleTrade("Put")}
-            disabled={amount <= 0 || amount > availableBalance}
+            disabled={amount <= 0 || amount > availableBalance || isTxPending}
             className="group relative w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-red-500 hover:bg-red-400 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold text-lg shadow-[0_0_20px_rgba(239,68,68,0.3)] disabled:shadow-none transition-all overflow-hidden"
           >
             <div className="absolute inset-0 bg-white/20 -translate-y-full group-hover:translate-y-0 transition-transform" />
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
-            PUT
+            {isTxPending ? "CONFIRMING..." : "PUT"}
           </button>
         </div>
       </div>
@@ -263,6 +389,21 @@ export default function TradePanel() {
                       <span className="text-sm font-mono">{calculateLivePnL(trade)}</span>
                     </div>
                   </div>
+
+                  {/* Blockchain Link */}
+                  {trade.txHash && (
+                    <div className="mt-2 border-t border-gray-700/50 pt-2 flex justify-between items-center">
+                      <span className="text-[10px] text-gray-500">Txn</span>
+                      <a 
+                        href={`${getNetworkConfig().explorerPrefix}${trade.txHash}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="text-[10px] text-blue-400 hover:text-blue-300 underline font-mono"
+                      >
+                        {trade.txHash.slice(0, 12)}...
+                      </a>
+                    </div>
+                  )}
                 </div>
               );
             })
