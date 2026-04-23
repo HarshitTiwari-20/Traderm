@@ -217,7 +217,7 @@ export default function TradePanel() {
       // 4. Submit to Network
       const res = await server.sendTransaction(signedTx);
 
-      if (res.status === "PENDING" || res.status === "SUCCESS") {
+      if ((res.status as string) === "PENDING" || (res.status as string) === "SUCCESS") {
         const newTrade: ActiveTrade = {
           id: Math.random().toString(36).substr(2, 9),
           type,

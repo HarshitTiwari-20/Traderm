@@ -12,8 +12,8 @@ export default function TradingChart() {
         container_id="tradingview_widget"
         width="100%"
         height="100%"
-        hide_top_toolbar={false}
-        hide_legend={false}
+        hide_top_toolbar={true}
+        hide_legend={true}
         save_image={false}
         backgroundColor="rgba(0, 0, 0, 0)" // Make background transparent to match the UI
         style="1" // 1 is candles
