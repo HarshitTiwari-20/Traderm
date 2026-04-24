@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { isConnected, getAddress, isAllowed, signTransaction, getNetworkDetails } from "@stellar/freighter-api";
 import { Horizon, rpc, Contract, TransactionBuilder, Networks, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 
@@ -63,9 +63,10 @@ export default function TradePanel({ symbol, onSymbolChange }: {
   const [trades, setTrades] = useState<ActiveTrade[]>([]);
   const [isTxPending, setIsTxPending] = useState(false);
   const [activeTab, setActiveTab] = useState<"trade" | "history">("trade");
+  const [now, setNow] = useState<number>(() => Date.now());
   const PAYOUT_RATE = 0.82;
 
-  const getNetworkConfig = () => {
+  const getNetworkConfig = useCallback(() => {
     if (network === "PUBLIC") return {
       horizonUrl: "https://horizon.stellar.org",
       rpcUrl: "https://soroban-rpc.mainnet.stellar.org",
@@ -80,7 +81,7 @@ export default function TradePanel({ symbol, onSymbolChange }: {
       contractId: TESTNET_CONTRACT_ID,
       explorerPrefix: "https://stellar.expert/explorer/testnet/tx/",
     };
-  };
+  }, [network]);
 
   // Fetch balance
   useEffect(() => {
@@ -112,7 +113,12 @@ export default function TradePanel({ symbol, onSymbolChange }: {
     fetch();
     const iv = setInterval(fetch, 10000);
     return () => clearInterval(iv);
-  }, [network]);
+  }, [getNetworkConfig]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Live price via WS
   useEffect(() => {
@@ -357,8 +363,7 @@ export default function TradePanel({ symbol, onSymbolChange }: {
             <div className="flex flex-col gap-3 p-4 bg-gray-900/50 border border-gray-800 rounded-2xl">
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Active Trades</h3>
               {trades.filter((t) => t.status === "active").map((trade) => {
-                const remaining = Math.max(0, Math.ceil((trade.expiryTime - Date.now()) / 1000));
-                const total = Math.ceil((trade.expiryTime - (trade.expiryTime - expiry * 1000)) / 1000);
+                const remaining = Math.max(0, Math.ceil((trade.expiryTime - now) / 1000));
                 const isWinning = (trade.type === "Call" && currentPrice > trade.entryPrice) ||
                                   (trade.type === "Put" && currentPrice < trade.entryPrice);
                 return (

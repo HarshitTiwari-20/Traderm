@@ -5,7 +5,7 @@ const xdrStr = tx.toXDR();
 console.log(typeof xdrStr);
 try {
   const parsed = TransactionBuilder.fromXDR(xdrStr, Networks.TESTNET);
-  console.log("Parsed using TransactionBuilder.fromXDR");
+  console.log("Parsed using TransactionBuilder.fromXDR", parsed);
 } catch (error) {
   console.log("Error with TransactionBuilder.fromXDR:", error instanceof Error ? error.message : String(error));
 }
