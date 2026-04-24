@@ -93,11 +93,15 @@ export default function TradePanel({ symbol, onSymbolChange }: {
             const server = new Horizon.Server(getNetworkConfig().horizonUrl);
             try {
               const acc = await server.loadAccount(pubKey);
-              const bal = acc.balances.find((b: any) => b.asset_type === "native");
+              type HorizonBalance = { asset_type: string; balance: string };
+              const bal = acc.balances.find((b: HorizonBalance) => b.asset_type === "native");
               if (bal) setAvailableBalance(parseFloat(bal.balance));
-            } catch (e: any) {
-              if (e?.response?.status === 404) setAvailableBalance(0);
-              else throw e;
+            } catch (error: unknown) {
+              const status = typeof error === "object" && error !== null && "response" in error
+                ? (error as { response?: { status?: number } }).response?.status
+                : undefined;
+              if (status === 404) setAvailableBalance(0);
+              else throw error;
             }
           }
         } else {
