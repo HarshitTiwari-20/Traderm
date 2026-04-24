@@ -41,6 +41,10 @@ The contract lives in `contracts/src/lib.rs` and exposes the following entry poi
 - Testnet trading contract: `CADKQRPQ3BKQ6GZ3UQEDJAYM6ROHJEHPIQZG2N5ANGTOHTJ7ASUCN3DW`
 - Mainnet trading contract: not yet configured in source (`MAINNET_CONTRACT_ID` is empty)
 
+<img src="https://github.com/HarshitTiwari-20/Traderm/blob/main/web/public/txn_data.png" width="600" height="500" />
+<img src="https://github.com/HarshitTiwari-20/Traderm/blob/main/web/public/on-chain-data.png" width="600" height="500" />
+<img src="https://github.com/HarshitTiwari-20/Traderm/blob/main/web/public/balance.png" width="600" height="500" />
+
 ### Token / pool deployment
 
 - The contract does not include a custom pool deployment.
@@ -71,6 +75,9 @@ cargo run
 ```
 
 It listens by default on `ws://0.0.0.0:8000/ws`.
+
+## Here is the video recording of the project:
+https://youtu.be/D-nap38FwOU 
 
 ## Frontend
 
