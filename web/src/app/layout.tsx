@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Traderm — Fixed-Time Crypto Trading on Stellar",
   description: "Trade binary options on Stellar. Real-time charts, on-chain settlement via Soroban smart contracts.",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({
