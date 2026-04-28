@@ -3,8 +3,13 @@
 
 Traderm is a decentralized trading interface built on Stellar's Soroban smart contracts. Traders can open prediction-style positions (Call/Put), lock token funds, and settle trades based on oracle prices.
 
-<img src="https://github.com/HarshitTiwari-20/Ubuntu-ss-bkup/blob/main/Screenshot%20from%202026-04-28%2015-00-19.png" width="600" height="500" />
-<img src="https://github.com/HarshitTiwari-20/Ubuntu-ss-bkup/blob/main/Screenshot%20from%202026-04-28%2015-01-28.png" width="600" height="500" />
+<img src="https://raw.githubusercontent.com/HarshitTiwari-20/Traderm/refs/heads/main/web/public/Screenshot%20from%202026-04-28%2015-00-19.png" width="600" height="500" />
+<img src="https://raw.githubusercontent.com/HarshitTiwari-20/Traderm/refs/heads/main/web/public/Screenshot%20from%202026-04-28%2015-01-28.png" width="600" height="500" />
+
+## Here is the video recording of the project:
+https://youtu.be/D-nap38FwOU 
+
+
 
 ### Key capabilities
 
@@ -68,8 +73,27 @@ cargo run
 
 It listens by default on `ws://0.0.0.0:8000/ws`.
 
-## Here is the video recording of the project:
-https://youtu.be/D-nap38FwOU 
+## Project Structure
+
+Traderm is structured as a full-stack monorepo with three main components:
+
+```text
+stellar-green-belt/
+├── contracts/               # Soroban Smart Contracts (Rust)
+│   ├── src/                 # Core contract logic (lib.rs)
+│   └── Cargo.toml           # Rust dependencies
+├── server/                  # WebSocket Server (Rust/Axum)
+│   ├── src/                 # Server logic (main.rs, binance.rs)
+│   └── Cargo.toml           # Server dependencies
+└── web/                     # Next.js Frontend (TypeScript/React)
+    ├── prisma/              # Database schema
+    ├── public/              # Static assets and images
+    ├── src/
+    │   ├── app/             # Next.js App Router pages
+    │   ├── components/      # Reusable React components (TradePanel, etc.)
+    │   └── lib/             # Hooks, utils, and contract connections
+    └── package.json         # Frontend dependencies
+```
 
 ## Frontend
 
@@ -122,13 +146,7 @@ cd server
 cargo run
 ```
 
-## Repository structure
 
-```
-contracts/   # Soroban smart contract source and build files
-server/      # Rust WebSocket server for market and websocket broadcast
-web/         # Next.js frontend, Prisma config, and UI components
-```
 
 ## Notes
 
