@@ -18,15 +18,15 @@ Traderm is a decentralized trading interface built on Stellar's Soroban smart co
 The contract lives in `contracts/src/lib.rs` and exposes the following entry points:
 
 - `init(oracle: Address, token: Address)`
-  - Initializes the contract with an oracle address and a token contract address
+- Initializes the contract with an oracle address and a token contract address
 - `open_trade(user, asset, amount, entry_price, expiry_time, prediction)`
-  - Locks funds by transferring tokens from the user to the contract vault
-  - Stores the trade with status `Open`
+- Locks funds by transferring tokens from the user to the contract vault
+- Stores the trade with status `Open`
 - `settle_trade(oracle, trade_id, settlement_price)`
-  - Can only be executed by the configured oracle
-  - Settles trade outcome and either refunds, pays out, or keeps funds locked
+- Can only be executed by the configured oracle
+- Settles trade outcome and either refunds, pays out, or keeps funds locked
 - `get_trade(trade_id)`
-  - Reads stored trade state from contract storage
+- Reads stored trade state from contract storage
 
 ### Contract addresses
 
