@@ -3,8 +3,8 @@
 
 Traderm is a decentralized trading interface built on Stellar's Soroban smart contracts. Traders can open prediction-style positions (Call/Put), lock token funds, and settle trades based on oracle prices.
 
-<img src="https://raw.githubusercontent.com/HarshitTiwari-20/Traderm/refs/heads/main/web/public/Screenshot%20from%202026-04-28%2015-00-19.png" width="600" height="500" />
-<img src="https://raw.githubusercontent.com/HarshitTiwari-20/Traderm/refs/heads/main/web/public/Screenshot%20from%202026-04-28%2015-01-28.png" width="600" height="500" />
+<img src="https://raw.githubusercontent.com/HarshitTiwari-20/Traderm/refs/heads/main/web/public/Screenshot%20from%202026-04-28%2015-00-19.png" width="1000" height="500" />
+<img src="https://raw.githubusercontent.com/HarshitTiwari-20/Traderm/refs/heads/main/web/public/Screenshot%20from%202026-04-28%2015-01-28.png" width="1000" height="500" />
 
 ## Here is the video recording of the project:
 https://youtu.be/D-nap38FwOU 
