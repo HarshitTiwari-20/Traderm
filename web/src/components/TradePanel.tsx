@@ -64,7 +64,7 @@ export default function TradePanel({ symbol, onSymbolChange }: {
   const [isTxPending, setIsTxPending] = useState(false);
   const [activeTab, setActiveTab] = useState<"trade" | "history">("trade");
   const [now, setNow] = useState<number>(() => Date.now());
-  const PAYOUT_RATE = 0.82;
+  const PAYOUT_RATE = 0.80;
 
   const getNetworkConfig = useCallback(() => {
     if (network === "PUBLIC") return {
@@ -330,8 +330,8 @@ export default function TradePanel({ symbol, onSymbolChange }: {
             {/* Payout preview */}
             {amount > 0 && (
               <div className="flex justify-between items-center text-xs px-1">
-                <span className="text-gray-500">Potential Profit</span>
-                <span className="text-emerald-400 font-mono font-bold">+{(amount * PAYOUT_RATE).toFixed(2)} XLM</span>
+                <span className="text-gray-500">Potential Return</span>
+                <span className="text-emerald-400 font-mono font-bold">+{(amount + amount * PAYOUT_RATE).toFixed(2)} XLM</span>
               </div>
             )}
 
@@ -380,7 +380,7 @@ export default function TradePanel({ symbol, onSymbolChange }: {
                       <div className="flex justify-between text-[11px]">
                         <span className="text-gray-500">Entry: <span className="text-gray-300 font-mono">${trade.entryPrice.toFixed(2)}</span></span>
                         <span className={isWinning ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>
-                          {isWinning ? `+${(trade.amount * PAYOUT_RATE).toFixed(2)}` : `-${trade.amount.toFixed(2)}`}
+                          {isWinning ? `+${(trade.amount + trade.amount * PAYOUT_RATE).toFixed(2)}` : `-${trade.amount.toFixed(2)}`}
                         </span>
                       </div>
                     </div>
@@ -447,7 +447,7 @@ export default function TradePanel({ symbol, onSymbolChange }: {
                         trade.status === "won" ? "text-emerald-400" :
                         trade.status === "lost" ? "text-red-400" : "text-gray-400"
                       }`}>
-                        {trade.status === "won" ? `+${(trade.amount * PAYOUT_RATE).toFixed(2)}` :
+                        {trade.status === "won" ? `+${(trade.amount + trade.amount * PAYOUT_RATE).toFixed(2)}` :
                          trade.status === "lost" ? `-${trade.amount.toFixed(2)}` :
                          trade.status === "active" ? "Active" : "0.00"}
                       </span>

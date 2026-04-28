@@ -11,7 +11,7 @@ interface Ticker {
   volume: number;
 }
 
-const SYMBOLS = ["BTCUSDT", "ETHUSDT", "XLMUSDT"] as const;
+export const SYMBOLS = ["BTCUSDT", "ETHUSDT", "XLMUSDT"] as const;
 type Symbol = typeof SYMBOLS[number];
 
 const WS_STREAMS: Record<Symbol, string> = {

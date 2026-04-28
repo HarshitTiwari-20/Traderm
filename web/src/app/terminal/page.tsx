@@ -58,7 +58,19 @@ export default function TerminalPage() {
 
         {/* Chart — hidden on mobile when panel open */}
         <div className={`flex-1 relative min-w-0 ${panelOpen ? "hidden lg:flex" : "flex"} flex-col`}>
-          <TradingChart symbol={CHART_SYMBOLS[symbol]} />
+          <div className="flex-1 relative min-h-0">
+            <TradingChart symbol={CHART_SYMBOLS[symbol]} />
+          </div>
+          
+          {/* Mobile positions button */}
+          <div className="lg:hidden p-3 border-t border-gray-800/60 bg-[#0d0d12]">
+            <button
+              onClick={() => setPanelOpen(true)}
+              className="w-full py-3 rounded-xl bg-gray-800/80 text-gray-300 border border-gray-700 font-medium text-sm hover:bg-gray-700 transition-colors"
+            >
+              Positions / Trade History
+            </button>
+          </div>
         </div>
 
         {/* Trade Panel — bottom sheet on mobile, sidebar on desktop */}

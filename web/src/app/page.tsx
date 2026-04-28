@@ -71,7 +71,11 @@ export default function HomePage() {
             baseY +
             Math.sin((x / canvas.width) * Math.PI * 3 + t + i * 0.5) * (24 + i * 6) +
             Math.sin((x / canvas.width) * Math.PI * 6 - t * 1.3 + i) * (10 + i * 2);
-          x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          if (x === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
         }
         ctx.stroke();
       }
@@ -149,6 +153,13 @@ export default function HomePage() {
 
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-3">
+          <a href="https://forms.google.com/" target="_blank" rel="noreferrer"
+            className="text-gray-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5 text-sm font-medium flex items-center gap-1.5" aria-label="Feedback Form">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            <span className="hidden lg:inline">Feedback</span>
+          </a>
           <a href="https://github.com/HarshitTiwari-20/Traderm" target="_blank" rel="noreferrer"
             className="text-gray-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5" aria-label="GitHub">
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -202,6 +213,12 @@ export default function HomePage() {
             Get Started
           </button>
           <div className="flex items-center gap-3 pt-1 px-1">
+            <a href="https://forms.google.com/" target="_blank" rel="noreferrer"
+              className="text-gray-500 hover:text-white transition-colors" aria-label="Feedback Form">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </a>
             <a href="https://github.com/HarshitTiwari-20/Traderm" target="_blank" rel="noreferrer"
               className="text-gray-500 hover:text-white transition-colors" aria-label="GitHub">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -261,7 +278,7 @@ export default function HomePage() {
         {/* Stats row */}
         <div className="flex flex-wrap justify-center gap-8 sm:gap-10 mt-14 sm:mt-16 text-center">
           {[
-            { label: "Payout Rate", value: "82%" },
+            { label: "Payout Rate", value: "80%" },
             { label: "Avg Trade Time", value: "60s" },
             { label: "Network", value: "Stellar" },
           ].map((s) => (

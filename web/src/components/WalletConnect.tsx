@@ -1,53 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { isConnected, requestAccess, getAddress, isAllowed, setAllowed } from "@stellar/freighter-api";
+import { useWallet } from "@/lib/use-wallet";
 
 export default function WalletConnect() {
-  const [publicKey, setPublicKey] = useState<string | null>(null);
+  const { publicKey, connectWallet, disconnectWallet } = useWallet();
 
-  useEffect(() => {
-    // Check if previously connected
-    const checkConnection = async () => {
-      try {
-        if (await isConnected()) {
-          const allowed = await isAllowed();
-          if (allowed) {
-            const keyObj = await getAddress();
-            if (keyObj && keyObj.address) {
-                setPublicKey(keyObj.address);
-            } else if (typeof keyObj === "string") {
-                setPublicKey(keyObj);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Freighter check failed", err);
-      }
-    };
-    checkConnection();
-  }, []);
-
-  const connectWallet = async () => {
+  const connectWalletHandler = async () => {
     try {
-      if (await isConnected()) {
-        await setAllowed();
-        const keyObj = await getAddress();
-        if (keyObj && keyObj.address) {
-            setPublicKey(keyObj.address);
-        } else if (typeof keyObj === "string") {
-            setPublicKey(keyObj);
-        }
-      } else {
-        alert("Freighter wallet is not installed!");
-      }
+      await connectWallet();
     } catch (err) {
-      console.error("Failed to connect wallet", err);
+      alert(String(err));
     }
   };
 
-  const disconnectWallet = () => {
-    setPublicKey(null);
+  const disconnectWalletHandler = () => {
+    disconnectWallet();
   };
 
   if (publicKey) {
@@ -58,7 +25,7 @@ export default function WalletConnect() {
           {publicKey.slice(0, 4)}...{publicKey.slice(-4)}
         </button>
         <button
-          onClick={disconnectWallet}
+          onClick={disconnectWalletHandler}
           className="px-5 py-2 rounded-full text-sm font-medium border border-red-500/50 text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-colors"
         >
           Disconnect
@@ -69,7 +36,7 @@ export default function WalletConnect() {
 
   return (
     <button
-      onClick={connectWallet}
+      onClick={connectWalletHandler}
       className="px-5 py-2 rounded-full text-sm font-medium border border-gray-700 hover:border-gray-500 transition-colors bg-gray-900/50"
     >
       Connect Wallet
