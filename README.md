@@ -10,8 +10,6 @@ Traderm is a decentralized trading interface built on Stellar's Soroban smart co
 https://youtu.be/D-nap38FwOU 
 
 
-<img src="https://github.com/HarshitTiwari-20/Traderm/blob/main/web/public/photo_2026-04-28_22-10-40.jpg" width="1000" height="500" />
-
 
 ### Key capabilities
 
@@ -74,6 +72,10 @@ cargo run
 ```
 
 It listens by default on `ws://0.0.0.0:8000/ws`.
+
+
+<img src="https://raw.githubusercontent.com/HarshitTiwari-20/Traderm/refs/heads/main/web/public/Gemini_Generated_Image_awc4ibawc4ibawc4.png" width="700" height="800" />
+
 
 ## Project Structure
 
