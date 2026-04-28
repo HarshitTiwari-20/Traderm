@@ -1,18 +1,10 @@
-# Stellar Green Belt
-
-**Stellar Green Belt** is a full-stack project combining:
-- a Soroban smart contract for fixed-time binary trading on Stellar
-- a Rust WebSocket server for market data streaming
-- a Next.js frontend for trading and wallet interaction
-
-This repo is organized into three main folders:
-- `contracts/` — Soroban smart contract written in Rust
-- `server/` — Rust WebSocket server for market data broadcast
-- `web/` — Next.js frontend with Freighter wallet integration
 
 ## Project Overview
 
 Traderm is a decentralized trading interface built on Stellar's Soroban smart contracts. Traders can open prediction-style positions (Call/Put), lock token funds, and settle trades based on oracle prices.
+
+<img src="https://github.com/HarshitTiwari-20/Ubuntu-ss-bkup/blob/main/Screenshot%20from%202026-04-28%2015-00-19.png" width="600" height="500" />
+<img src="https://github.com/HarshitTiwari-20/Ubuntu-ss-bkup/blob/main/Screenshot%20from%202026-04-28%2015-01-28.png" width="600" height="500" />
 
 ### Key capabilities
 
