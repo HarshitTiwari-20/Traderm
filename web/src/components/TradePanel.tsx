@@ -60,7 +60,21 @@ export default function TradePanel({ symbol, onSymbolChange }: {
   const [availableBalance, setAvailableBalance] = useState<number>(0);
   const [sliderValue, setSliderValue] = useState<number>(0);
   const [currentPrice, setCurrentPrice] = useState<number>(0);
-  const [trades, setTrades] = useState<ActiveTrade[]>([]);
+  const [trades, setTrades] = useState<ActiveTrade[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("traderm_trades");
+        if (saved) return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to load trades", e);
+      }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem("traderm_trades", JSON.stringify(trades));
+  }, [trades]);
   const [isTxPending, setIsTxPending] = useState(false);
   const [activeTab, setActiveTab] = useState<"trade" | "history">("trade");
   const [now, setNow] = useState<number>(() => Date.now());
