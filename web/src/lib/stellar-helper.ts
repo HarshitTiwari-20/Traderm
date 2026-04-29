@@ -89,7 +89,6 @@ class StellarHelper {
 
   async connectWallet(): Promise<string> {
     this.ensureKit();
-    StellarWalletsKit.setWallet(FREIGHTER_ID);
 
     const { address } = await StellarWalletsKit.authModal();
     if (!address || !address.startsWith("G")) {

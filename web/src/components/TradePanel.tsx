@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { isConnected, getAddress, isAllowed, signTransaction, getNetworkDetails } from "@stellar/freighter-api";
 import { Horizon, rpc, Contract, TransactionBuilder, Networks, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 
@@ -60,6 +60,8 @@ export default function TradePanel({ symbol, onSymbolChange }: {
   const [availableBalance, setAvailableBalance] = useState<number>(0);
   const [sliderValue, setSliderValue] = useState<number>(0);
   const [currentPrice, setCurrentPrice] = useState<number>(0);
+  const currentPriceRef = useRef(currentPrice);
+  useEffect(() => { currentPriceRef.current = currentPrice; }, [currentPrice]);
   const [trades, setTrades] = useState<ActiveTrade[]>(() => {
     if (typeof window !== "undefined") {
       try {
@@ -137,34 +139,41 @@ export default function TradePanel({ symbol, onSymbolChange }: {
   // Live price via WS
   useEffect(() => {
     const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${WS_STREAMS[symbol]}`);
+    let lastUpdate = 0;
     ws.onmessage = (e) => {
-      try { const d = JSON.parse(e.data); if (d?.c) setCurrentPrice(parseFloat(d.c)); } catch {}
+      try { 
+        const d = JSON.parse(e.data); 
+        if (d?.c) {
+          const nowMs = Date.now();
+          if (nowMs - lastUpdate > 500) { // Throttle to 2 updates per second
+            setCurrentPrice(parseFloat(d.c)); 
+            lastUpdate = nowMs;
+          }
+        } 
+      } catch {}
     };
     return () => ws.close();
   }, [symbol]);
 
   // Evaluate trades
   useEffect(() => {
-    const iv = setInterval(() => {
-      const now = Date.now();
-      setTrades((prev) =>
-        prev.map((t) => {
-          if (t.status !== "active") return t;
-          if (now >= t.expiryTime) {
-            let status: "won" | "lost" | "tie" = "lost";
-            if (t.type === "Call" && currentPrice > t.entryPrice) status = "won";
-            if (t.type === "Put" && currentPrice < t.entryPrice) status = "won";
-            if (currentPrice === t.entryPrice) status = "tie";
-            if (status === "won") setAvailableBalance((b) => b + t.amount + t.amount * PAYOUT_RATE);
-            else if (status === "tie") setAvailableBalance((b) => b + t.amount);
-            return { ...t, status };
-          }
-          return t;
-        })
-      );
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [currentPrice]);
+    setTrades((prev) =>
+      prev.map((t) => {
+        if (t.status !== "active") return t;
+        if (Date.now() >= t.expiryTime) {
+          const price = currentPriceRef.current;
+          let status: "won" | "lost" | "tie" = "lost";
+          if (t.type === "Call" && price > t.entryPrice) status = "won";
+          if (t.type === "Put" && price < t.entryPrice) status = "won";
+          if (price === t.entryPrice) status = "tie";
+          if (status === "won") setAvailableBalance((b) => b + t.amount + t.amount * PAYOUT_RATE);
+          else if (status === "tie") setAvailableBalance((b) => b + t.amount);
+          return { ...t, status };
+        }
+        return t;
+      })
+    );
+  }, [now]); // Evaluate on `now` tick (every 1s)
 
   const handleAmountChange = (val: number) => {
     setAmount(val);

@@ -10,6 +10,12 @@ Traderm is a decentralized trading interface built on Stellar's Soroban smart co
 https://youtu.be/D-nap38FwOU 
 
 
+## Google Forms Responses
+
+https://docs.google.com/spreadsheets/d/1am73VONhRkS9MNJ2kmzbpf72_svCuOoEKgDf01wrTD0/edit?usp=sharing12p17
+
+
+
 
 ### Key capabilities
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useWallet } from "@/lib/use-wallet";
+import toast from "react-hot-toast";
 
 export default function WalletConnect() {
   const { publicKey, connectWallet, disconnectWallet } = useWallet();
@@ -8,8 +9,16 @@ export default function WalletConnect() {
   const connectWalletHandler = async () => {
     try {
       await connectWallet();
+      toast.success("Wallet connected successfully!", {
+        style: {
+          background: "#333",
+          color: "#fff",
+        },
+      });
     } catch (err) {
-      alert(String(err));
+      if (err instanceof Error && err.message !== "User closed the modal") {
+        toast.error(String(err));
+      }
     }
   };
 
