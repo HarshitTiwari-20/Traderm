@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { isConnected, getAddress, isAllowed, signTransaction, getNetworkDetails } from "@stellar/freighter-api";
+import toast from "react-hot-toast";
+import { useWallet } from "@/lib/use-wallet";
+import { isWalletConnected, getConnectedPublicKey, signTransaction, getNetworkDetails, connectWallet as stellarConnectWallet } from "@/lib/stellar-helper";
 import { Horizon, rpc, Contract, TransactionBuilder, Networks, nativeToScVal, xdr } from "@stellar/stellar-sdk";
+import * as StellarSdk from "@stellar/stellar-sdk";
 
 type TradeType = "Call" | "Put";
 type Symbol = "BTCUSDT" | "ETHUSDT" | "XLMUSDT";
@@ -18,15 +21,19 @@ interface ActiveTrade {
   txHash?: string;
 }
 
-const TESTNET_CONTRACT_ID = "CADKQRPQ3BKQ6GZ3UQEDJAYM6ROHJEHPIQZG2N5ANGTOHTJ7ASUCN3DW";
-const MAINNET_CONTRACT_ID = "";
-const QUICK_AMOUNTS = [5, 10, 25, 50];
+const TESTNET_CONTRACT_ID = process.env.NEXT_PUBLIC_SOROBAN_CONTRACT_ID_TESTNET || "CADKQRPQ3BKQ6GZ3UQEDJAYM6ROHJEHPIQZG2N5ANGTOHTJ7ASUCN3DW";
+const MAINNET_CONTRACT_ID = process.env.NEXT_PUBLIC_SOROBAN_CONTRACT_ID_MAINNET || "";
+const QUICK_AMOUNTS = [10, 25, 50, 100];
 const SYMBOLS: Symbol[] = ["BTCUSDT", "ETHUSDT", "XLMUSDT"];
 const WS_STREAMS: Record<Symbol, string> = {
   BTCUSDT: "btcusdt@ticker",
   ETHUSDT: "ethusdt@ticker",
   XLMUSDT: "xlmusdt@ticker",
 };
+
+function Skeleton({ className }: { className?: string }) {
+  return <div className={`animate-pulse bg-gray-800 rounded-lg ${className}`} />;
+}
 
 // Circular countdown ring SVG
 function CountdownRing({ seconds, total }: { seconds: number; total: number }) {
@@ -54,6 +61,7 @@ export default function TradePanel({ symbol, onSymbolChange }: {
   symbol: Symbol;
   onSymbolChange: (s: Symbol) => void;
 }) {
+  const { publicKey } = useWallet();
   const [network, setNetwork] = useState<"TESTNET" | "PUBLIC">("TESTNET");
   const [amount, setAmount] = useState<number>(0);
   const [expiry, setExpiry] = useState<number>(60);
@@ -80,6 +88,11 @@ export default function TradePanel({ symbol, onSymbolChange }: {
   const [isTxPending, setIsTxPending] = useState(false);
   const [activeTab, setActiveTab] = useState<"trade" | "history">("trade");
   const [now, setNow] = useState<number>(() => Date.now());
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   const PAYOUT_RATE = 0.80;
 
   const getNetworkConfig = useCallback(() => {
@@ -103,9 +116,8 @@ export default function TradePanel({ symbol, onSymbolChange }: {
   useEffect(() => {
     const fetch = async () => {
       try {
-        if (await isConnected() && await isAllowed()) {
-          const keyObj = await getAddress();
-          const pubKey = typeof keyObj === "string" ? keyObj : keyObj?.address;
+        if (isWalletConnected()) {
+          const pubKey = getConnectedPublicKey();
           if (pubKey) {
             const server = new Horizon.Server(getNetworkConfig().horizonUrl);
             try {
@@ -122,14 +134,16 @@ export default function TradePanel({ symbol, onSymbolChange }: {
             }
           }
         } else {
-          setAvailableBalance(10000);
+          setAvailableBalance(0);
         }
-      } catch {}
+      } catch {
+        setAvailableBalance(0);
+      }
     };
     fetch();
     const iv = setInterval(fetch, 10000);
     return () => clearInterval(iv);
-  }, [getNetworkConfig]);
+  }, [getNetworkConfig, publicKey]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -155,24 +169,52 @@ export default function TradePanel({ symbol, onSymbolChange }: {
     return () => ws.close();
   }, [symbol]);
 
-  // Evaluate trades
+  // Evaluate trades — must NOT call setState/toast inside setTrades updater (React rule)
   useEffect(() => {
-    setTrades((prev) =>
-      prev.map((t) => {
-        if (t.status !== "active") return t;
-        if (Date.now() >= t.expiryTime) {
-          const price = currentPriceRef.current;
-          let status: "won" | "lost" | "tie" = "lost";
-          if (t.type === "Call" && price > t.entryPrice) status = "won";
-          if (t.type === "Put" && price < t.entryPrice) status = "won";
-          if (price === t.entryPrice) status = "tie";
-          if (status === "won") setAvailableBalance((b) => b + t.amount + t.amount * PAYOUT_RATE);
-          else if (status === "tie") setAvailableBalance((b) => b + t.amount);
-          return { ...t, status };
+    const price = currentPriceRef.current;
+    const nowMs = Date.now();
+
+    // Step 1: compute settlements outside any setState call
+    setTrades((prev) => {
+      // Collect side effects to run after the pure update
+      const sideEffects: Array<() => void> = [];
+
+      const next = prev.map((t) => {
+        if (t.status !== "active" || nowMs < t.expiryTime) return t;
+
+        let status: "won" | "lost" | "tie" = "lost";
+        if (t.type === "Call" && price > t.entryPrice) status = "won";
+        if (t.type === "Put" && price < t.entryPrice) status = "won";
+        if (price === t.entryPrice) status = "tie";
+
+        // Capture side effects — do NOT call them here
+        if (status === "won") {
+          const payout = t.amount * PAYOUT_RATE;
+          sideEffects.push(() => {
+            setAvailableBalance((b) => b + t.amount + payout);
+            toast.success(`Trade Won! +${payout.toFixed(2)} XLM`, { icon: "🟢" });
+          });
+        } else if (status === "tie") {
+          sideEffects.push(() => {
+            setAvailableBalance((b) => b + t.amount);
+            toast.success("Trade Tie. Amount refunded.", { icon: "⚪" });
+          });
+        } else {
+          sideEffects.push(() => {
+            toast.error(`Trade Lost. -${t.amount.toFixed(2)} XLM`, { icon: "🔴" });
+          });
         }
-        return t;
-      })
-    );
+
+        return { ...t, status };
+      });
+
+      // Step 2: schedule side effects to run after this render cycle
+      if (sideEffects.length > 0) {
+        setTimeout(() => sideEffects.forEach((fn) => fn()), 0);
+      }
+
+      return next;
+    });
   }, [now]); // Evaluate on `now` tick (every 1s)
 
   const handleAmountChange = (val: number) => {
@@ -191,45 +233,86 @@ export default function TradePanel({ symbol, onSymbolChange }: {
     if (!config.contractId) { alert(`Contract not deployed on ${network}!`); return; }
     setIsTxPending(true);
     try {
-      if (!await isConnected() || !await isAllowed()) throw new Error("Wallet not connected");
+      if (!isWalletConnected()) throw new Error("Wallet not connected");
       const walletNet = await getNetworkDetails();
       if (walletNet.networkPassphrase !== config.passphrase)
         throw new Error(`Network mismatch! Switch Freighter to ${network === "TESTNET" ? "Test Net" : "Main Net"}.`);
-      const keyObj = await getAddress();
-      const pubKey = typeof keyObj === "string" ? keyObj : keyObj?.address;
+      const pubKey = getConnectedPublicKey();
       if (!pubKey) throw new Error("Could not get public key");
-      const server = new rpc.Server(config.rpcUrl);
-      const horizon = new Horizon.Server(config.horizonUrl);
-      const account = await horizon.loadAccount(pubKey);
-      const contract = new Contract(config.contractId);
+        const server = new rpc.Server(config.rpcUrl);
+        const horizon = new Horizon.Server(config.horizonUrl);
+        const account = await horizon.loadAccount(pubKey);
+
+        // Basic contract ID handling: accept either a strkey (C...) or a hex id
+        const cid = (config.contractId || "").trim();
+        if (!cid) {
+          throw new Error(`No contract ID configured for ${network}.`);
+        }
+
+        // The Contract constructor accepts a valid Soroban StrKey (C...) directly.
+        // If the ID is invalid or not set, this will throw a clear error.
+        let contract: InstanceType<typeof Contract>;
+        try {
+          contract = new Contract(cid);
+          console.debug("Contract instantiated with ID:", cid);
+        } catch (e) {
+          console.error("Contract instantiation error:", e);
+          throw new Error(
+            `Failed to instantiate contract. The contract ID "${cid}" is invalid or the contract has not been deployed to ${network}. Check your NEXT_PUBLIC_SOROBAN_CONTRACT_ID_TESTNET env variable.`,
+          );
+        }
+      // Fetch the actual ledger timestamp from the RPC to avoid clock skew.
+      // The contract's `env.ledger().timestamp()` reads the ledger's closeTime —
+      // so we must base our expiry on the same source, not the local system clock.
+      const latestLedger = await server.getLatestLedger();
+      // `closeTime` is the Unix timestamp (as a string) of the last closed ledger
+      const ledgerTime = Number((latestLedger as unknown as { closeTime: string }).closeTime);
+      const txExpiry = ledgerTime + expiry + 120; // ledger time + trade duration + 2min buffer
+      console.log("Ledger closeTime:", ledgerTime, "| Local time:", Math.floor(Date.now() / 1000), "| txExpiry:", txExpiry);
+
+      // Soroban #[contracttype] unit enum variants are encoded as ScVec([ScSym("VariantName")])
+      // NOT as u32 — passing u32 causes a type mismatch inside the WASM VM
+      const predictionVal = xdr.ScVal.scvVec([
+        xdr.ScVal.scvSymbol(type === "Call" ? "Call" : "Put"),
+      ]);
+
       const tx = new TransactionBuilder(account, { fee: "10000", networkPassphrase: config.passphrase })
         .addOperation(contract.call("open_trade",
           nativeToScVal(pubKey, { type: "address" }),
           nativeToScVal(symbol.replace("USDT", ""), { type: "string" }),
-          nativeToScVal(Math.floor(amount * 10_000_000), { type: "i128" }),
-          nativeToScVal(Math.floor(currentPrice * 100), { type: "i128" }),
-          nativeToScVal(Math.floor(Date.now() / 1000) + expiry, { type: "u64" }),
-          xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(type)])
+          nativeToScVal(BigInt(Math.floor(amount * 10_000_000)), { type: "i128" }),
+          nativeToScVal(BigInt(Math.floor(currentPrice * 100)), { type: "i128" }),
+          nativeToScVal(BigInt(txExpiry), { type: "u64" }),
+          predictionVal
         ))
-        .setTimeout(60).build();
+        .setTimeout(120).build(); // Increased timeout to 120s
+
       const assembled = await server.prepareTransaction(tx);
       const signResult = await signTransaction(assembled.toXDR(), { networkPassphrase: config.passphrase });
-      if (signResult.error) throw new Error(signResult.error.message || "Signing failed");
+      
+      if (signResult.error) {
+        console.error("Signing error details:", signResult.error);
+        throw new Error(signResult.error.message || "Signing failed");
+      }
       const signed = TransactionBuilder.fromXDR(signResult.signedTxXdr, config.passphrase);
       const res = await server.sendTransaction(signed);
       if ((res.status as string) === "PENDING" || (res.status as string) === "SUCCESS") {
         setAvailableBalance((b) => b - amount);
-        setTrades((prev) => [{
+        const newTrade: ActiveTrade = {
           id: Math.random().toString(36).substr(2, 9),
           symbol, type, amount,
           entryPrice: currentPrice,
           expiryTime: Date.now() + expiry * 1000,
           status: "active",
           txHash: res.hash,
-        }, ...prev]);
+        };
+        setTrades((prev) => [newTrade, ...prev]);
+        toast.success(`${type} trade placed successfully!`, {
+          style: { background: "#10b981", color: "#fff" }
+        });
       } else throw new Error("Transaction failed");
     } catch (err) {
-      alert("Error: " + (err instanceof Error ? err.message : String(err)));
+      toast.error("Error: " + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsTxPending(false);
     }
@@ -251,7 +334,7 @@ export default function TradePanel({ symbol, onSymbolChange }: {
             className={`flex-1 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${
               activeTab === tab ? "bg-gray-700 text-white shadow" : "text-gray-500 hover:text-gray-300"
             }`}>
-            {tab === "trade" ? "Trade" : `History${trades.length > 0 ? ` (${trades.length})` : ""}`}
+            {tab === "trade" ? "Trade" : `History${isMounted && trades.length > 0 ? ` (${trades.length})` : ""}`}
           </button>
         ))}
       </div>
@@ -293,11 +376,15 @@ export default function TradePanel({ symbol, onSymbolChange }: {
             </div>
 
             {/* Live price badge */}
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center h-5">
               <span className="text-xs text-gray-500">Live Price</span>
-              <span className="text-emerald-400 font-mono font-bold text-sm">
-                ${currentPrice > 0 ? currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: currentPrice < 1 ? 6 : 2 }) : "—"}
-              </span>
+              {currentPrice > 0 ? (
+                <span className="text-emerald-400 font-mono font-bold text-sm">
+                  ${currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: currentPrice < 1 ? 6 : 2 })}
+                </span>
+              ) : (
+                <Skeleton className="w-20 h-4" />
+              )}
             </div>
 
             {/* Amount */}
@@ -359,26 +446,47 @@ export default function TradePanel({ symbol, onSymbolChange }: {
             )}
 
             {/* Trade buttons */}
-            <div className="flex gap-2">
-              <button onClick={() => handleTrade("Call")}
-                disabled={amount <= 0 || amount > availableBalance || isTxPending}
-                className="group relative flex-1 flex items-center justify-center gap-1.5 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold text-sm shadow-[0_0_16px_rgba(16,185,129,0.3)] disabled:shadow-none transition-all overflow-hidden">
-                <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform" />
-                <svg className="w-4 h-4 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                </svg>
-                <span className="relative z-10">{isTxPending ? "..." : "CALL"}</span>
+            {!publicKey ? (
+              <button
+                onClick={() => stellarConnectWallet()}
+                className="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all"
+              >
+                Connect Wallet to Trade
               </button>
-              <button onClick={() => handleTrade("Put")}
-                disabled={amount <= 0 || amount > availableBalance || isTxPending}
-                className="group relative flex-1 flex items-center justify-center gap-1.5 py-3.5 rounded-xl bg-red-500 hover:bg-red-400 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold text-sm shadow-[0_0_16px_rgba(239,68,68,0.3)] disabled:shadow-none transition-all overflow-hidden">
-                <div className="absolute inset-0 bg-white/10 -translate-y-full group-hover:translate-y-0 transition-transform" />
-                <svg className="w-4 h-4 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                </svg>
-                <span className="relative z-10">{isTxPending ? "..." : "PUT"}</span>
-              </button>
-            </div>
+            ) : (
+              <div className="flex gap-2">
+                <button onClick={() => handleTrade("Call")}
+                  disabled={amount <= 0 || amount > availableBalance || isTxPending || currentPrice === 0}
+                  className="group relative flex-1 flex flex-col items-center justify-center py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold transition-all overflow-hidden shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+                  <div className="flex items-center gap-1.5 relative z-10">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                    </svg>
+                    <span className="text-sm">{isTxPending ? "PENDING..." : "UP"}</span>
+                  </div>
+                  {amount > 0 && !isTxPending && (
+                    <span className="text-[10px] opacity-80 font-mono relative z-10">
+                      Payout: +{(amount * PAYOUT_RATE).toFixed(2)}
+                    </span>
+                  )}
+                </button>
+                <button onClick={() => handleTrade("Put")}
+                  disabled={amount <= 0 || amount > availableBalance || isTxPending || currentPrice === 0}
+                  className="group relative flex-1 flex flex-col items-center justify-center py-3 rounded-xl bg-red-500 hover:bg-red-400 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold transition-all overflow-hidden shadow-[0_0_20px_rgba(239,68,68,0.2)]">
+                  <div className="flex items-center gap-1.5 relative z-10">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                    </svg>
+                    <span className="text-sm">{isTxPending ? "PENDING..." : "DOWN"}</span>
+                  </div>
+                  {amount > 0 && !isTxPending && (
+                    <span className="text-[10px] opacity-80 font-mono relative z-10">
+                      Payout: +{(amount * PAYOUT_RATE).toFixed(2)}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Active trades */}
@@ -416,18 +524,24 @@ export default function TradePanel({ symbol, onSymbolChange }: {
       ) : (
         /* History Tab */
         <div className="flex flex-col gap-4 p-4 bg-gray-900/50 border border-gray-800 rounded-2xl flex-1 overflow-hidden">
-          {/* P&L Summary */}
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: "Total P&L", value: `${totalPnL >= 0 ? "+" : ""}${totalPnL.toFixed(2)}`, color: totalPnL >= 0 ? "text-emerald-400" : "text-red-400" },
-              { label: "Won", value: wonCount.toString(), color: "text-emerald-400" },
-              { label: "Lost", value: lostCount.toString(), color: "text-red-400" },
-            ].map((s) => (
-              <div key={s.label} className="flex flex-col gap-0.5 bg-gray-800/60 rounded-xl p-3 text-center">
-                <span className={`text-base font-bold font-mono ${s.color}`}>{s.value}</span>
-                <span className="text-[10px] text-gray-500 uppercase tracking-wide">{s.label}</span>
-              </div>
-            ))}
+          {/* Stats Summary Cards */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-0.5 bg-gray-800/60 rounded-xl p-3">
+              <span className="text-[10px] text-gray-500 uppercase tracking-wide font-bold">Total Trades</span>
+              <span className="text-base font-bold text-white">{trades.length}</span>
+            </div>
+            <div className="flex flex-col gap-0.5 bg-gray-800/60 rounded-xl p-3">
+              <span className="text-[10px] text-gray-500 uppercase tracking-wide font-bold">Win Rate</span>
+              <span className="text-base font-bold text-emerald-400">
+                {(wonCount + lostCount) > 0 ? Math.round((wonCount / (wonCount + lostCount)) * 100) : 0}%
+              </span>
+            </div>
+            <div className="col-span-2 flex flex-col gap-0.5 bg-gray-800/60 rounded-xl p-3">
+              <span className="text-[10px] text-gray-500 uppercase tracking-wide font-bold">Total Profit/Loss</span>
+              <span className={`text-base font-bold ${totalPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {totalPnL >= 0 ? "+" : ""}{totalPnL.toFixed(2)} XLM
+              </span>
+            </div>
           </div>
 
           {/* Win rate bar */}
@@ -449,7 +563,17 @@ export default function TradePanel({ symbol, onSymbolChange }: {
           {/* Trade history list */}
           <div className="flex flex-col gap-2 overflow-y-auto pr-1 flex-1">
             {trades.length === 0 ? (
-              <div className="text-gray-600 text-xs text-center py-8">No trades yet</div>
+              <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                <div className="w-12 h-12 rounded-full bg-gray-800/50 flex items-center justify-center mb-3">
+                  <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h4 className="text-sm font-semibold text-gray-400 mb-1">No Trade History</h4>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  Your settled trades will appear here. Start trading to build your history!
+                </p>
+              </div>
             ) : (
               trades.map((trade) => (
                 <div key={trade.id} className="flex items-center gap-3 p-3 bg-gray-800/40 rounded-xl border border-gray-700/50">

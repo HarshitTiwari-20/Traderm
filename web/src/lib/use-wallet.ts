@@ -6,27 +6,42 @@ import {
   isWalletConnected,
 } from "./stellar-helper";
 
+// Shared state for all useWallet hooks
+let globalPublicKey: string | null = null;
+const listeners = new Set<(key: string | null) => void>();
+
+function updateGlobalPublicKey(key: string | null) {
+  globalPublicKey = key;
+  listeners.forEach((l) => l(key));
+}
+
 export function useWallet() {
-  const [publicKey, setPublicKey] = useState<string | null>(null);
+  const [publicKey, setPublicKey] = useState<string | null>(globalPublicKey);
 
   useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        if (isWalletConnected()) {
-          const address = getConnectedPublicKey();
-          if (address) setPublicKey(address);
-        }
-      } catch (err) {
-        console.error("Wallet check failed", err);
+    // Initial sync
+    if (isWalletConnected()) {
+      const address = getConnectedPublicKey();
+      if (address !== globalPublicKey) {
+        updateGlobalPublicKey(address);
       }
+    }
+
+    const listener = (key: string | null) => setPublicKey(key);
+    listeners.add(listener);
+    
+    // Set local state to current global value
+    setPublicKey(globalPublicKey);
+
+    return () => {
+      listeners.delete(listener);
     };
-    checkConnection();
   }, []);
 
   const connectWallet = useCallback(async () => {
     try {
       const address = await stellarConnectWallet();
-      setPublicKey(address);
+      updateGlobalPublicKey(address);
       return address;
     } catch (err) {
       console.error("Failed to connect wallet", err);
@@ -36,8 +51,9 @@ export function useWallet() {
 
   const disconnectWallet = useCallback(() => {
     stellarDisconnectWallet();
-    setPublicKey(null);
+    updateGlobalPublicKey(null);
   }, []);
 
   return { publicKey, connectWallet, disconnectWallet };
 }
+

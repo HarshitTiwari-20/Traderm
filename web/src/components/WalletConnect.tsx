@@ -15,10 +15,12 @@ export default function WalletConnect() {
           color: "#fff",
         },
       });
-    } catch (err) {
-      if (err instanceof Error && err.message !== "User closed the modal") {
-        toast.error(String(err));
+    } catch (err: any) {
+      // Gracefully handle modal closure
+      if (err?.message?.includes("closed the modal") || err?.code === -1) {
+        return;
       }
+      toast.error(String(err?.message || err));
     }
   };
 

@@ -82,6 +82,7 @@ class StellarHelper {
       network: this.walletNetwork,
       selectedWalletId: FREIGHTER_ID,
       modules: defaultModules(),
+      modalTheme: 'dark',
     });
 
     this.initialized = true;
@@ -100,14 +101,20 @@ class StellarHelper {
     return address;
   }
 
-  async signTransaction(xdr: string): Promise<{ signedTxXdr: string }> {
+  async signTransaction(xdr: string, opts?: { networkPassphrase?: string, address?: string }): Promise<{ signedTxXdr: string }> {
     this.ensureKit();
 
-    const signer = this._publicKey ? { address: this._publicKey } : {};
+    const signer = opts?.address || this._publicKey ? { address: opts?.address || this._publicKey! } : {};
     return StellarWalletsKit.signTransaction(xdr, {
-      networkPassphrase: this.networkPassphrase,
+      networkPassphrase: opts?.networkPassphrase || this.networkPassphrase,
       ...signer,
     });
+  }
+
+  async getNetworkDetails(): Promise<{ networkPassphrase: string }> {
+    this.ensureKit();
+    // In @creit.tech/stellar-wallets-kit, the method is called getNetwork()
+    return (StellarWalletsKit as any).getNetwork();
   }
 
   async verifyConnection(address: string): Promise<boolean> {
@@ -138,8 +145,9 @@ class StellarHelper {
 const stellar = new StellarHelper("testnet");
 
 export const connectWallet = () => stellar.connectWallet();
-export const signTransaction = (xdr: string) => stellar.signTransaction(xdr);
+export const signTransaction = (xdr: string, opts?: any) => stellar.signTransaction(xdr, opts);
 export const disconnectWallet = () => stellar.disconnect();
 export const isWalletConnected = () => stellar.isConnected;
 export const getConnectedPublicKey = () => stellar.publicKey;
+export const getNetworkDetails = () => stellar.getNetworkDetails();
 export const verifyWalletConnection = (address: string) => stellar.verifyConnection(address);

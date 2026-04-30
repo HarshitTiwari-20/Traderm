@@ -415,6 +415,55 @@ export default function HomePage() {
           </div>
         </div>
       )}
+      {/* ── Footer ── */}
+      <footer className="relative z-10 border-t border-white/5 bg-black/20 py-12 px-5 sm:px-8">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-blue-500 flex items-center justify-center">
+                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <span className="font-bold text-base bg-gradient-to-r from-emerald-400 to-cyan-300 bg-clip-text text-transparent">
+                Traderm
+              </span>
+            </div>
+            <p className="text-gray-500 text-sm max-w-xs leading-relaxed">
+              The first fixed-time trading terminal on Stellar. Trade on-chain with speed and security.
+            </p>
+          </div>
+          
+          <div className="flex flex-wrap gap-x-12 gap-y-8">
+            <div className="flex flex-col gap-3">
+              <span className="text-white text-sm font-semibold">Product</span>
+              <a href="/terminal" className="text-gray-500 hover:text-emerald-400 text-sm transition-colors">Terminal</a>
+              <a href="https://github.com/HarshitTiwari-20/Traderm" target="_blank" className="text-gray-500 hover:text-emerald-400 text-sm transition-colors">Docs</a>
+              <a href="#" className="text-gray-500 hover:text-emerald-400 text-sm transition-colors">Leaderboard</a>
+            </div>
+            <div className="flex flex-col gap-3">
+              <span className="text-white text-sm font-semibold">Community</span>
+              <a href="https://x.com/Harshit_310" target="_blank" className="text-gray-500 hover:text-emerald-400 text-sm transition-colors">Twitter</a>
+              <a href="#" className="text-gray-500 hover:text-emerald-400 text-sm transition-colors">Discord</a>
+              <a href="https://github.com/HarshitTiwari-20/Traderm" target="_blank" className="text-gray-500 hover:text-emerald-400 text-sm transition-colors">GitHub</a>
+            </div>
+            <div className="flex flex-col gap-3">
+              <span className="text-white text-sm font-semibold">Legal</span>
+              <a href="#" className="text-gray-500 hover:text-emerald-400 text-sm transition-colors">Terms</a>
+              <a href="#" className="text-gray-500 hover:text-emerald-400 text-sm transition-colors">Privacy</a>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto mt-12 pt-8 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] sm:text-xs text-gray-600">
+          <span>© 2026 Traderm. All rights reserved.</span>
+          <div className="flex items-center gap-4">
+            <span>Powered by Soroban</span>
+            <div className="w-1 h-1 rounded-full bg-gray-800" />
+            <span>Built on Stellar</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
+

@@ -1,0 +1,25 @@
+# Trading Terminal Enhancements
+
+- `[x]` Smart Contract Updates (`contracts/src/lib.rs`)
+  - `[x]` Add `admin: Address` and `is_paused: bool` to the contract state.
+  - `[x]` Create `admin_pause(env: Env, admin: Address, pause: bool)` to halt/resume trading.
+  - `[x]` Implement input validations: `amount > 0` and `expiry_time > current_time`.
+  - `[x]` Add reentrancy protections by updating state before transfers.
+  - `[x]` Emit events for trade opened, settled, and payout sent.
+  - `[x]` Update settlement logic to reflect TWAP.
+- `[ ]` Update `TradingChart.tsx`
+  - `[ ]` Replace `react-ts-tradingview-widgets` with `lightweight-charts`.
+- `[ ]` Update `TradePanel.tsx`
+  - `[ ]` Add quick preset buttons ($10, $25, $50, $100).
+  - `[ ]` Update UP/DOWN buttons to display payout.
+  - `[ ]` Add toast notifications for trade placed, won, lost.
+  - `[ ]` Add skeleton loaders and empty states.
+  - `[ ]` Ensure mobile responsiveness.
+- `[ ]` Update `app/page.tsx`
+  - `[ ]` Add Footer (Docs, Twitter, Discord, Terms, Privacy Policy).
+- `[ ]` Add `Leaderboard.tsx`
+  - `[ ]` Create Leaderboard / Recent Trades mock component.
+- `[ ]` Update `app/terminal/page.tsx`
+  - `[ ]` Integrate `Leaderboard.tsx`.
+- `[ ]` Verify wallet configuration for Freighter/WalletConnect and Address display.
+- `[ ]` Validate changes by running builds.

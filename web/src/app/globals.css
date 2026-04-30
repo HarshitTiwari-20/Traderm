@@ -1,26 +1,66 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050507;
+  --foreground: #ffffff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #1f2937;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #374151;
+}
+
+/* Stellar Wallets Kit Modal Customization */
+#swk-modal-container {
+  --swk-modal-background: #0d0d12;
+  --swk-modal-text: #ffffff;
+}
+
+#swk-modal-container [class*="swk-modal"] {
+  background-color: #0d0d12 !important;
+  color: white !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5) !important;
+}
+
+#swk-modal-container [class*="swk-button"] {
+  background-color: #1a1a20 !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 12px !important;
+  transition: all 0.2s ease !important;
+}
+
+#swk-modal-container [class*="swk-button"]:hover {
+  background-color: #25252d !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+#swk-modal-container [class*="swk-modal-body"]::-webkit-scrollbar {
+  width: 0px !important;
+}
+
+

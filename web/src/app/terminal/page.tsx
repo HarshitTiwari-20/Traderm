@@ -6,6 +6,7 @@ import TradePanel from "@/components/TradePanel";
 import WalletConnect from "@/components/WalletConnect";
 import SignOutButton from "@/components/SignOutButton";
 import MarketStatsBar from "@/components/MarketStatsBar";
+import Leaderboard from "@/components/Leaderboard";
 
 type Symbol = "BTCUSDT" | "ETHUSDT" | "XLMUSDT";
 const CHART_SYMBOLS: Record<Symbol, string> = {
@@ -55,6 +56,7 @@ export default function TerminalPage() {
 
       {/* ── Main Content ── */}
       <div className="flex flex-1 overflow-hidden">
+        <Leaderboard />
 
         {/* Chart — hidden on mobile when panel open */}
         <div className={`flex-1 relative min-w-0 ${panelOpen ? "hidden lg:flex" : "flex"} flex-col`}>
