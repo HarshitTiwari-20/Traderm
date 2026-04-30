@@ -82,7 +82,6 @@ class StellarHelper {
       network: this.walletNetwork,
       selectedWalletId: FREIGHTER_ID,
       modules: defaultModules(),
-      modalTheme: 'dark',
     });
 
     this.initialized = true;

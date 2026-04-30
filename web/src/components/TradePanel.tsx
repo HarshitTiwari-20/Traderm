@@ -19,6 +19,10 @@ interface ActiveTrade {
   expiryTime: number;
   status: "active" | "won" | "lost" | "tie";
   txHash?: string;
+  /** The u64 trade ID returned by open_trade() on the Soroban contract */
+  contractTradeId?: number;
+  /** Network the trade was placed on */
+  network?: "TESTNET" | "PUBLIC";
 }
 
 const TESTNET_CONTRACT_ID = process.env.NEXT_PUBLIC_SOROBAN_CONTRACT_ID_TESTNET || "CADKQRPQ3BKQ6GZ3UQEDJAYM6ROHJEHPIQZG2N5ANGTOHTJ7ASUCN3DW";
@@ -169,14 +173,12 @@ export default function TradePanel({ symbol, onSymbolChange }: {
     return () => ws.close();
   }, [symbol]);
 
-  // Evaluate trades — must NOT call setState/toast inside setTrades updater (React rule)
+  // Settle expired trades — calls /api/settle for on-chain trades, local-only for simulated
   useEffect(() => {
     const price = currentPriceRef.current;
     const nowMs = Date.now();
 
-    // Step 1: compute settlements outside any setState call
     setTrades((prev) => {
-      // Collect side effects to run after the pure update
       const sideEffects: Array<() => void> = [];
 
       const next = prev.map((t) => {
@@ -187,28 +189,82 @@ export default function TradePanel({ symbol, onSymbolChange }: {
         if (t.type === "Put" && price < t.entryPrice) status = "won";
         if (price === t.entryPrice) status = "tie";
 
-        // Capture side effects — do NOT call them here
-        if (status === "won") {
-          const payout = t.amount * PAYOUT_RATE;
+        // On-chain trade: delegate settlement to the oracle API route
+        if (t.contractTradeId !== undefined && t.txHash) {
+          const tradeSnapshot = { ...t, status };
           sideEffects.push(() => {
-            setAvailableBalance((b) => b + t.amount + payout);
-            toast.success(`Trade Won! +${payout.toFixed(2)} XLM`, { icon: "🟢" });
-          });
-        } else if (status === "tie") {
-          sideEffects.push(() => {
-            setAvailableBalance((b) => b + t.amount);
-            toast.success("Trade Tie. Amount refunded.", { icon: "⚪" });
+            // Optimistic UI update first
+            const payout = tradeSnapshot.amount * PAYOUT_RATE;
+            if (status === "won") {
+              setAvailableBalance((b) => b + tradeSnapshot.amount + payout);
+              toast.loading(`Settling trade on-chain…`, { id: `settle-${t.id}`, icon: "⏳" });
+            } else if (status === "tie") {
+              setAvailableBalance((b) => b + tradeSnapshot.amount);
+              toast.loading(`Settling trade on-chain…`, { id: `settle-${t.id}`, icon: "⏳" });
+            } else {
+              toast.loading(`Settling trade on-chain…`, { id: `settle-${t.id}`, icon: "⏳" });
+            }
+
+            // Call oracle API route to execute settle_trade() on the contract
+            fetch("/api/settle", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                tradeId: tradeSnapshot.contractTradeId,
+                exitPrice: price,
+                network: tradeSnapshot.network || "TESTNET",
+              }),
+            })
+              .then(async (res) => {
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                  console.error("Settlement API error:", data);
+                  if (status === "won") {
+                    toast.error(`Settlement failed — funds may be delayed. Hash: ${data.hash || "N/A"}`, { id: `settle-${t.id}` });
+                  } else {
+                    toast.dismiss(`settle-${t.id}`);
+                  }
+                  return;
+                }
+                if (status === "won") {
+                  toast.success(
+                    `Trade Won! +${(tradeSnapshot.amount * PAYOUT_RATE).toFixed(2)} XLM paid on-chain 🎉`,
+                    { id: `settle-${t.id}`, icon: "🟢", duration: 6000 }
+                  );
+                } else if (status === "tie") {
+                  toast.success("Trade Tie — stake refunded on-chain.", { id: `settle-${t.id}`, icon: "⚪" });
+                } else {
+                  toast.error(`Trade Lost. -${tradeSnapshot.amount.toFixed(2)} XLM`, { id: `settle-${t.id}`, icon: "🔴" });
+                }
+              })
+              .catch((err) => {
+                console.error("Settlement fetch error:", err);
+                toast.error("Settlement request failed. Check console.", { id: `settle-${t.id}` });
+              });
           });
         } else {
-          sideEffects.push(() => {
-            toast.error(`Trade Lost. -${t.amount.toFixed(2)} XLM`, { icon: "🔴" });
-          });
+          // Simulated / demo trade — local state only
+          if (status === "won") {
+            const payout = t.amount * PAYOUT_RATE;
+            sideEffects.push(() => {
+              setAvailableBalance((b) => b + t.amount + payout);
+              toast.success(`Trade Won! +${payout.toFixed(2)} XLM`, { icon: "🟢" });
+            });
+          } else if (status === "tie") {
+            sideEffects.push(() => {
+              setAvailableBalance((b) => b + t.amount);
+              toast.success("Trade Tie. Amount refunded.", { icon: "⚪" });
+            });
+          } else {
+            sideEffects.push(() => {
+              toast.error(`Trade Lost. -${t.amount.toFixed(2)} XLM`, { icon: "🔴" });
+            });
+          }
         }
 
         return { ...t, status };
       });
 
-      // Step 2: schedule side effects to run after this render cycle
       if (sideEffects.length > 0) {
         setTimeout(() => sideEffects.forEach((fn) => fn()), 0);
       }
@@ -289,15 +345,32 @@ export default function TradePanel({ symbol, onSymbolChange }: {
 
       const assembled = await server.prepareTransaction(tx);
       const signResult = await signTransaction(assembled.toXDR(), { networkPassphrase: config.passphrase });
-      
-      if (signResult.error) {
-        console.error("Signing error details:", signResult.error);
-        throw new Error(signResult.error.message || "Signing failed");
-      }
       const signed = TransactionBuilder.fromXDR(signResult.signedTxXdr, config.passphrase);
       const res = await server.sendTransaction(signed);
       if ((res.status as string) === "PENDING" || (res.status as string) === "SUCCESS") {
         setAvailableBalance((b) => b - amount);
+
+        // Poll for the confirmed transaction to read the open_trade() return value (contract trade ID)
+        let contractTradeId: number | undefined;
+        try {
+          for (let i = 0; i < 15; i++) {
+            await new Promise((r) => setTimeout(r, 2000));
+            const poll = await server.getTransaction(res.hash);
+            if (poll.status !== "NOT_FOUND") {
+              // The return value is a u64 ScVal — parse it as a BigInt then convert to number
+              if (poll.status === "SUCCESS" && poll.returnValue) {
+                const returnVal = poll.returnValue;
+                if (returnVal.switch().name === "scvU64") {
+                  contractTradeId = Number(returnVal.u64().toBigInt());
+                }
+              }
+              break;
+            }
+          }
+        } catch (pollErr) {
+          console.warn("Could not poll tx for contractTradeId:", pollErr);
+        }
+
         const newTrade: ActiveTrade = {
           id: Math.random().toString(36).substr(2, 9),
           symbol, type, amount,
@@ -305,11 +378,16 @@ export default function TradePanel({ symbol, onSymbolChange }: {
           expiryTime: Date.now() + expiry * 1000,
           status: "active",
           txHash: res.hash,
+          contractTradeId,
+          network,
         };
         setTrades((prev) => [newTrade, ...prev]);
-        toast.success(`${type} trade placed successfully!`, {
-          style: { background: "#10b981", color: "#fff" }
-        });
+        toast.success(
+          contractTradeId
+            ? `${type} trade placed! Contract ID: ${contractTradeId}`
+            : `${type} trade placed successfully!`,
+          { style: { background: "#10b981", color: "#fff" } }
+        );
       } else throw new Error("Transaction failed");
     } catch (err) {
       toast.error("Error: " + (err instanceof Error ? err.message : String(err)));

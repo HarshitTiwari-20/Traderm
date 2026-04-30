@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createChart, ColorType, IChartApi, CrosshairMode, CandlestickSeries } from "lightweight-charts";
+import { createChart, ColorType, IChartApi, CrosshairMode, CandlestickSeries, UTCTimestamp } from "lightweight-charts";
 
 export default function TradingChart({ symbol = "BINANCE:BTCUSDT" }: { symbol?: string }) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -49,7 +49,7 @@ export default function TradingChart({ symbol = "BINANCE:BTCUSDT" }: { symbol?: 
       .then((res) => res.json())
       .then((data) => {
         const candles = data.map((d: any) => ({
-          time: d[0] / 1000,
+          time: (d[0] / 1000) as UTCTimestamp,
           open: parseFloat(d[1]),
           high: parseFloat(d[2]),
           low: parseFloat(d[3]),
@@ -67,7 +67,7 @@ export default function TradingChart({ symbol = "BINANCE:BTCUSDT" }: { symbol?: 
       if (data.e === "kline") {
         const k = data.k;
         candleSeries.update({
-          time: k.t / 1000,
+          time: (k.t / 1000) as UTCTimestamp,
           open: parseFloat(k.o),
           high: parseFloat(k.h),
           low: parseFloat(k.l),

@@ -43,3 +43,5 @@ next-env.d.ts
 .test_fromXDR.js
 .test_prepare.js
 
+.vscode
+.gemini
