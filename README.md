@@ -41,7 +41,7 @@ The contract lives in `contracts/src/lib.rs` and exposes the following entry poi
 
 ### Contract addresses
 
-- Testnet trading contract: `CADKQRPQ3BKQ6GZ3UQEDJAYM6ROHJEHPIQZG2N5ANGTOHTJ7ASUCN3DW`
+- Testnet trading contract: `CCGVBHWFYR2LGN2Z3MQVPSJZJB6BN4CYIBUGZXJXXDVOG7TOG3KE5NRT`
 - Mainnet trading contract: not yet configured in source (`MAINNET_CONTRACT_ID` is empty)
 
 <img src="https://github.com/HarshitTiwari-20/Traderm/blob/main/web/public/txn_data.png" width="600" height="500" />
